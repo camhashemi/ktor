@@ -5,6 +5,7 @@
 package io.ktor.network.sockets
 
 import io.ktor.network.selector.*
+import io.ktor.network.util.*
 import java.net.*
 import java.nio.channels.*
 
@@ -17,10 +18,10 @@ internal class SocketImpl<out S : SocketChannel>(
         require(!channel.isBlocking) { "channel need to be configured as non-blocking" }
     }
 
-    override val localAddress: SocketAddress
+    override val localAddress: NetworkAddress
         get() = socket.localSocketAddress
 
-    override val remoteAddress: SocketAddress
+    override val remoteAddress: NetworkAddress
         get() = socket.remoteSocketAddress
 
     @Suppress("BlockingMethodInNonBlockingContext")

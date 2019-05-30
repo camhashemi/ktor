@@ -4,10 +4,12 @@
 
 package io.ktor.client.utils
 
+import io.ktor.client.*
 import io.ktor.util.*
 import kotlinx.coroutines.*
 import kotlinx.io.pool.*
 import java.nio.*
+import kotlin.coroutines.*
 
 @Suppress("KDocMissingDocumentation", "unused")
 @Deprecated(
@@ -21,7 +23,8 @@ val HTTP_CLIENT_THREAD_COUNT: Int = 2
     "Binary compatibility",
     level = DeprecationLevel.HIDDEN
 )
-val HTTP_CLIENT_DEFAULT_DISPATCHER: CoroutineDispatcher get() = Dispatchers.IO
+val HTTP_CLIENT_DEFAULT_DISPATCHER: CoroutineDispatcher
+    get() = Dispatchers.IO
 
 /**
  * Singleton pool of [ByteBuffer] objects used for [HttpClient].
@@ -35,3 +38,10 @@ class ByteBufferPool : DefaultPool<ByteBuffer>(DEFAULT_HTTP_POOL_SIZE) {
 
     override fun clearInstance(instance: ByteBuffer): ByteBuffer = instance.apply { clear() }
 }
+
+/**
+ * Run request blocking in [HttpClient] dispatcher.
+ */
+@KtorExperimentalAPI
+actual fun <T> HttpClient.runBlocking(block: suspend CoroutineScope.() -> T): T =
+    runBlocking(EmptyCoroutineContext, block)

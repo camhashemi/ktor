@@ -22,13 +22,14 @@ import kotlin.coroutines.*
 @Suppress("KDocMissingDocumentation")
 class OkHttpEngine(
     override val config: OkHttpConfig
-) : HttpClientJvmEngine("ktor-okhttp") {
+) : HttpClientEngine, CallScope("ktor-okhttp") {
+    override val dispatcher: CoroutineDispatcher by lazy { createClientDispatcher(config.threadsCount) }
 
     private val engine: OkHttpClient = config.preconfigured
         ?: OkHttpClient.Builder().apply(config.config).build()
 
     override suspend fun execute(data: HttpRequestData): HttpResponseData {
-        val callContext = createCallContext()
+        val callContext = newCall()
         val engineRequest = data.convertToOkHttpRequest(callContext)
 
         return try {

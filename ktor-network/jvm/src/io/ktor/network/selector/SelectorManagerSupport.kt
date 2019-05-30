@@ -14,8 +14,10 @@ import kotlin.coroutines.*
  * Base class for NIO selector managers
  */
 @KtorExperimentalAPI
-abstract class SelectorManagerSupport internal constructor() : SelectorManager {
-    final override val provider: SelectorProvider = SelectorProvider.provider()
+abstract class SelectorManagerSupport internal constructor() : JvmSelectorManager {
+
+    override val provider: SelectorProvider = SelectorProvider.provider()
+
     /**
      * Number of pending selectables
      */
@@ -29,20 +31,21 @@ abstract class SelectorManagerSupport internal constructor() : SelectorManager {
     /**
      * Publish current [selectable] interest, any thread
      */
-    protected abstract fun publishInterest(selectable: Selectable)
+    protected abstract fun publishInterest(selectable: JvmSelectable)
 
     final override suspend fun select(selectable: Selectable, interest: SelectInterest) {
+        require(selectable is JvmSelectable)
         require(selectable.interestedOps and interest.flag != 0)
 
-        suspendCancellableCoroutine<Unit> { c ->
-//            val c = base.tracked()  // useful for debugging
+        suspendCancellableCoroutine<Unit> { continuation ->
+            //  val continuation = base.tracked()  // useful for debugging
 
-            c.invokeOnCancellation {
+            continuation.invokeOnCancellation {
                 selectable.dispose()
             }
-            selectable.suspensions.addSuspension(interest, c)
+            selectable.suspensions.addSuspension(interest, continuation)
 
-            if (!c.isCancelled) {
+            if (!continuation.isCancelled) {
                 publishInterest(selectable)
             }
         }
@@ -80,7 +83,7 @@ abstract class SelectorManagerSupport internal constructor() : SelectorManager {
                 cancelled++
             } else {
                 val unit = Unit
-                subj.suspensions.invokeForEachPresent(readyOps) { resume(unit) }
+                subj.suspensions.invokeForEachPresent(readyOps) { resume(Unit) }
 
                 val newOps = interestOps and readyOps.inv()
                 if (newOps != interestOps) {
@@ -105,15 +108,15 @@ abstract class SelectorManagerSupport internal constructor() : SelectorManager {
     /**
      * Applies selectable's current interest (should be invoked in selection thread)
      */
-    protected fun applyInterest(selector: Selector, s: Selectable) {
+    protected fun applyInterest(selector: Selector, selectable: JvmSelectable) {
         try {
-            val channel = s.channel
+            val channel = selectable.channel
             val key = channel.keyFor(selector)
-            val ops = s.interestedOps
+            val ops = selectable.interestedOps
 
             if (key == null) {
                 if (ops != 0) {
-                    channel.register(selector, ops, s)
+                    channel.register(selector, ops, selector)
                 }
             } else {
                 if (key.interestOps() != ops) {
@@ -124,16 +127,16 @@ abstract class SelectorManagerSupport internal constructor() : SelectorManager {
             if (ops != 0) {
                 pending++
             }
-        } catch (t: Throwable) {
-            s.channel.keyFor(selector)?.cancel()
-            cancelAllSuspensions(s, t)
+        } catch (cause: Throwable) {
+            selectable.channel.keyFor(selector)?.cancel()
+            cancelAllSuspensions(selectable, cause)
         }
     }
 
     /**
      * Notify selectable's closure
      */
-    protected fun notifyClosedImpl(selector: Selector, key: SelectionKey, attachment: Selectable) {
+    protected fun notifyClosedImpl(selector: Selector, key: SelectionKey, attachment: JvmSelectable) {
         cancelAllSuspensions(attachment, ClosedChannelException())
 
         key.subject = null
@@ -143,30 +146,30 @@ abstract class SelectorManagerSupport internal constructor() : SelectorManager {
     /**
      * Cancel all selectable's suspensions with the specified exception
      */
-    protected fun cancelAllSuspensions(attachment: Selectable, t: Throwable) {
+    protected fun cancelAllSuspensions(attachment: JvmSelectable, cause: Throwable) {
         attachment.suspensions.invokeForEachPresent {
-            resumeWithException(t)
+            resumeWithException(cause)
         }
     }
 
     /**
      * Cancel all suspensions with the specified exception, reset all interests
      */
-    protected fun cancelAllSuspensions(selector: Selector, t: Throwable?) {
-        val cause = t ?: ClosedSelectorCancellationException()
+    protected fun cancelAllSuspensions(selector: Selector, cause: Throwable?) {
+        val cause = cause ?: ClosedSelectorCancellationException()
 
         selector.keys().forEach { k ->
             try {
                 if (k.isValid) k.interestOps(0)
             } catch (ignore: CancelledKeyException) {
             }
-            (k.attachment() as? Selectable)?.let { cancelAllSuspensions(it, cause) }
+            (k.attachment() as? JvmSelectable)?.let { cancelAllSuspensions(it, cause) }
             k.cancel()
         }
     }
 
-    private var SelectionKey.subject: Selectable?
-        get() = attachment() as? Selectable
+    private var SelectionKey.subject: JvmSelectable?
+        get() = attachment() as? JvmSelectable
         set(newValue) {
             attach(newValue)
         }

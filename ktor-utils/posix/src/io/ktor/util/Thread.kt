@@ -7,7 +7,8 @@ package io.ktor.util
 import kotlin.native.ThreadLocal
 import kotlin.native.concurrent.*
 
-internal class ThreadId {
+@InternalAPI
+class ThreadId {
     init {
         freeze()
     }

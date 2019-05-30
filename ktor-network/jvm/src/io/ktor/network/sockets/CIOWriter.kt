@@ -16,7 +16,7 @@ import java.nio.channels.*
 internal fun CoroutineScope.attachForWritingImpl(
     channel: ByteChannel,
     nioChannel: WritableByteChannel,
-    selectable: Selectable,
+    selectable: JvmSelectable,
     selector: SelectorManager,
     pool: ObjectPool<ByteBuffer>
 ): ReaderJob {
@@ -57,7 +57,7 @@ internal fun CoroutineScope.attachForWritingImpl(
 internal fun CoroutineScope.attachForWritingDirectImpl(
     channel: ByteChannel,
     nioChannel: WritableByteChannel,
-    selectable: Selectable,
+    selectable: JvmSelectable,
     selector: SelectorManager
 ): ReaderJob {
     return reader(Dispatchers.Unconfined, channel) {

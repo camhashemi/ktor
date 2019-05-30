@@ -5,21 +5,20 @@
 package io.ktor.network.selector
 
 import io.ktor.util.*
+import io.ktor.util.collections.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
-import java.io.Closeable
 import java.nio.channels.*
 import java.util.concurrent.atomic.*
 import kotlin.coroutines.*
 import kotlin.coroutines.intrinsics.*
-import kotlin.jvm.*
 
 /**
  * Default CIO selector manager implementation
  */
 @Suppress("BlockingMethodInNonBlockingContext")
 @KtorExperimentalAPI
-class ActorSelectorManager(dispatcher: CoroutineContext) : SelectorManagerSupport(), Closeable, CoroutineScope {
+class ActorSelectorManager(dispatcher: CoroutineContext) : SelectorManagerSupport() {
     @Volatile
     private var selectorRef: Selector? = null
 
@@ -33,7 +32,7 @@ class ActorSelectorManager(dispatcher: CoroutineContext) : SelectorManagerSuppor
     @Volatile
     private var closed = false
 
-    private val mb = LockFreeMPSCQueue<Selectable>()
+    private val mb = LockFreeMPSCQueue<JvmSelectable>()
 
     override val coroutineContext: CoroutineContext = dispatcher + CoroutineName("selector")
 
@@ -41,7 +40,7 @@ class ActorSelectorManager(dispatcher: CoroutineContext) : SelectorManagerSuppor
         launch {
             val selector = provider.openSelector() ?: error("openSelector() = null")
             selectorRef = selector
-            try {
+            selector.use { selector ->
                 try {
                     process(mb, selector)
                 } catch (t: Throwable) {
@@ -59,13 +58,11 @@ class ActorSelectorManager(dispatcher: CoroutineContext) : SelectorManagerSuppor
                     val m = mb.removeFirstOrNull() ?: break
                     cancelAllSuspensions(m, ClosedSendChannelException("Failed to apply interest: selector closed"))
                 }
-            } finally {
-                selector.close()
             }
         }
     }
 
-    private suspend fun process(mb: LockFreeMPSCQueue<Selectable>, selector: Selector) {
+    private suspend fun process(mb: LockFreeMPSCQueue<JvmSelectable>, selector: Selector) {
         while (!closed) {
             processInterests(mb, selector)
 
@@ -115,17 +112,19 @@ class ActorSelectorManager(dispatcher: CoroutineContext) : SelectorManagerSuppor
         }
     }
 
-    private fun processInterests(mb: LockFreeMPSCQueue<Selectable>, selector: Selector) {
+    private fun processInterests(mb: LockFreeMPSCQueue<JvmSelectable>, selector: Selector) {
         while (true) {
             val selectable = mb.removeFirstOrNull() ?: break
             applyInterest(selector, selectable)
         }
     }
 
-    override fun notifyClosed(s: Selectable) {
-        cancelAllSuspensions(s, ClosedChannelException())
+    override fun notifyClosed(selectable: Selectable) {
+        check(selectable is JvmSelectable) { "Invalid selectable instance: $selectable" }
+
+        cancelAllSuspensions(selectable, ClosedChannelException())
         selectorRef?.let { selector ->
-            s.channel.keyFor(selector)?.let { k ->
+            selectable.channel.keyFor(selector)?.let { k ->
                 k.cancel()
                 selectWakeup()
             }
@@ -135,14 +134,14 @@ class ActorSelectorManager(dispatcher: CoroutineContext) : SelectorManagerSuppor
     /**
      * Publish current [selectable] interest
      */
-    override fun publishInterest(selectable: Selectable) {
+    override fun publishInterest(selectable: JvmSelectable) {
+
         try {
             if (mb.addLast(selectable)) {
                 if (!continuation.resume(Unit)) {
                     selectWakeup()
                 }
-            }
-            else if (selectable.channel.isOpen) throw ClosedSelectorException()
+            } else if (selectable.channel.isOpen) throw ClosedSelectorException()
             else throw ClosedChannelException()
         } catch (t: Throwable) {
             cancelAllSuspensions(selectable, t)
@@ -150,11 +149,11 @@ class ActorSelectorManager(dispatcher: CoroutineContext) : SelectorManagerSuppor
     }
 
 
-    private suspend fun LockFreeMPSCQueue<Selectable>.receiveOrNull(): Selectable? {
+    private suspend fun LockFreeMPSCQueue<JvmSelectable>.receiveOrNull(): JvmSelectable? {
         return removeFirstOrNull() ?: receiveOrNullSuspend()
     }
 
-    private suspend fun LockFreeMPSCQueue<Selectable>.receiveOrNullSuspend(): Selectable? {
+    private suspend fun LockFreeMPSCQueue<JvmSelectable>.receiveOrNullSuspend(): JvmSelectable? {
         while (true) {
             val m = removeFirstOrNull()
             if (m != null) return m
@@ -184,7 +183,8 @@ class ActorSelectorManager(dispatcher: CoroutineContext) : SelectorManagerSuppor
         fun resume(value: R): Boolean {
             val continuation = ref.getAndSet(null)
             if (continuation != null) {
-                continuation.resume(value) /** we resume unintercepted, see [dispatchIfNeeded] */
+                continuation.resume(value)
+                /** we resume unintercepted, see [dispatchIfNeeded] */
                 return true
             }
 

@@ -6,6 +6,7 @@ package io.ktor.network.sockets.tests
 
 import io.ktor.network.selector.*
 import io.ktor.network.sockets.*
+import io.ktor.network.util.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.debug.junit4.*
 import kotlinx.coroutines.io.*
