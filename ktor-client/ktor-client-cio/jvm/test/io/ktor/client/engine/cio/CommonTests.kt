@@ -9,8 +9,6 @@ import io.ktor.client.tests.*
 
 class CIOCookiesTest : CookiesTest(CIO)
 
-class CIOAttributesTest : AttributesTest(CIO)
-
 class CIOPostTest : PostTest(CIO)
 
 class CIOFullFormTest : FullFormTest(CIO)

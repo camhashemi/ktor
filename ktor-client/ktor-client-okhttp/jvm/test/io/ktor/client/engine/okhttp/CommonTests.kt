@@ -9,8 +9,6 @@ import org.junit.*
 
 class OkHttpCookiesTest : CookiesTest(OkHttp)
 
-class OkHttpAttributesTest : AttributesTest(OkHttp)
-
 class OkHttpPostTest : PostTest(OkHttp)
 
 @Ignore

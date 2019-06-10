@@ -18,6 +18,9 @@ import kotlin.test.*
 internal fun Application.contentTestServer() {
     routing {
         route("/content") {
+            get("/hello") {
+                call.respond("hello")
+            }
             post("/echo") {
                 val content = call.request.receiveChannel().toByteArray()
                 call.respond(content)
