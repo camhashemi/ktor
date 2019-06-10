@@ -7,6 +7,7 @@ package io.ktor.client.engine.js.compatible
 import io.ktor.client.engine.js.*
 import io.ktor.util.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.*
 import kotlinx.coroutines.io.*
 import org.khronos.webgl.*
 import org.w3c.fetch.*
@@ -26,17 +27,36 @@ internal fun readBody(
     response: Response,
     callContext: CoroutineContext
 ): ByteReadChannel = if (PlatformUtils.IS_NODE) {
-    callContext.readBodyBlocking(response)
+    callContext.readBodyNode(response)
 } else {
-    callContext.readBodyStream(response)
+    callContext.readBodyBrowser(response)
 }
 
-private fun CoroutineContext.readBodyBlocking(response: Response): ByteReadChannel = GlobalScope.writer(this) {
-    val responseBuffer = response.arrayBuffer().await()
-    channel.writeFully(Uint8Array(responseBuffer).asByteArray())
+private fun CoroutineContext.readBodyNode(response: Response): ByteReadChannel = GlobalScope.writer(this) {
+    val body = response.body
+    val responseData = Channel<ByteArray>(Channel.UNLIMITED)
+
+    body.on("data") { chunk: ArrayBuffer ->
+        responseData.offer(Uint8Array(chunk).asByteArray())
+    }
+
+    body.on("end") {
+        responseData.close()
+    }
+
+    try {
+        for (chunk in responseData) {
+            channel.writeFully(chunk)
+        }
+    } catch (cause: Throwable) {
+        body.destroy(cause)
+        throw cause
+    }
+
+    Unit
 }.channel
 
-private fun CoroutineContext.readBodyStream(response: Response): ByteReadChannel {
+private fun CoroutineContext.readBodyBrowser(response: Response): ByteReadChannel {
     @Suppress("UNCHECKED_CAST_TO_EXTERNAL_INTERFACE")
     val stream = response.body as? ReadableStream ?: error("Fail to obtain native stream: $response")
     return stream.toByteChannel(this)
@@ -47,8 +67,13 @@ private fun ReadableStream.toByteChannel(
 ): ByteReadChannel = GlobalScope.writer(callContext) {
     val reader = getReader()
     while (true) {
-        val chunk = reader.readChunk() ?: break
-        channel.writeFully(chunk.asByteArray())
+        try {
+            val chunk = reader.readChunk() ?: break
+            channel.writeFully(chunk.asByteArray())
+        } catch (cause: Throwable) {
+            reader.cancel(cause)
+            throw cause
+        }
     }
 }.channel
 
