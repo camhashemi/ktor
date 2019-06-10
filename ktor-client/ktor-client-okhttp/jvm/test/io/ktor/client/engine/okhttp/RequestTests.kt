@@ -6,6 +6,8 @@ package io.ktor.client.engine.okhttp
 
 import io.ktor.client.request.*
 import io.ktor.client.tests.utils.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.debug.*
 import okhttp3.*
 import kotlin.test.*
 
@@ -20,7 +22,7 @@ class RequestTests {
     }
 
     @Test
-    fun featuresTest() = clientTest(OkHttp) {
+    fun testFeatures() = clientTest(OkHttp) {
         config {
             engine {
                 addInterceptor(LoggingInterceptor())
@@ -30,6 +32,24 @@ class RequestTests {
 
         test { client ->
             client.get<String>("https://google.com")
+        }
+    }
+
+    @Test
+    fun testWithCancel() = clientTest(OkHttp) {
+        test { client ->
+            GlobalScope.launch {
+                while (true) {
+                    delay(1000)
+                    DebugProbes.dumpCoroutines()
+                }
+            }
+            repeat (1000) {
+                println(it)
+                withTimeoutOrNull(100) {
+                    client.get<ByteArray>("$TEST_SERVER/content/stream")
+                }
+            }
         }
     }
 

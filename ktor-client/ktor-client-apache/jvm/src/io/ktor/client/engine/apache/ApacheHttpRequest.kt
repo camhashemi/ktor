@@ -15,8 +15,7 @@ import kotlin.coroutines.*
 internal suspend fun CloseableHttpAsyncClient.sendRequest(
     request: ApacheRequestProducer,
     callContext: CoroutineContext
-): HttpResponseData {
-    val response = CompletableDeferred<HttpResponseData>()
+): HttpResponseData = suspendCancellableCoroutine { continuation ->
     val requestTime = GMTDate()
 
     val consumer = ApacheResponseConsumer(callContext) { rawResponse, body ->
@@ -30,39 +29,26 @@ internal suspend fun CloseableHttpAsyncClient.sendRequest(
             }
         }
         val result = HttpResponseData(status, requestTime, headers, version, body, callContext)
-        response.complete(result)
+        continuation.resume(result)
     }
 
     val callback = object : FutureCallback<Unit> {
         override fun failed(exception: Exception) {
             callContext.cancel()
-            response.completeExceptionally(exception)
+            continuation.cancel(exception)
         }
 
         override fun completed(result: Unit) {}
 
         override fun cancelled() {
             callContext.cancel()
-            response.cancel()
+            continuation.cancel()
         }
-    }
-
-    response.invokeOnCompletion { cause ->
-        cause ?: return@invokeOnCompletion
-        callContext.cancel()
     }
 
     try {
-        val future = execute(request, consumer, callback)
-        response.invokeOnCompletion { cause ->
-            cause ?: return@invokeOnCompletion
-            future.cancel(true)
-        }
-
+        execute(request, consumer, callback)
     } catch (cause: Throwable) {
-        response.completeExceptionally(cause)
-        throw cause
+        continuation.cancel(cause)
     }
-
-    return response.await()
 }

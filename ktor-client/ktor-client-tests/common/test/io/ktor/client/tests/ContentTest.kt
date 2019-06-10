@@ -5,10 +5,13 @@
 package io.ktor.client.tests
 
 import io.ktor.client.*
+import io.ktor.client.features.json.*
+import io.ktor.client.features.json.serializer.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
 import io.ktor.client.response.*
 import io.ktor.client.tests.utils.*
+import io.ktor.client.utils.*
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.util.*
@@ -170,6 +173,37 @@ class ContentTest : ClientLoader() {
     }
 
     @Test
+    fun testJsonPostWithEmptyBody() = clientTests {
+        config {
+            install(JsonFeature) {
+                serializer = KotlinxSerializer()
+            }
+        }
+
+        test { client ->
+            val response = client.post<String>("$TEST_SERVER/echo") {
+                contentType(ContentType.Application.Json)
+            }
+
+            assertEquals("{}", response)
+        }
+    }
+
+    @Test
+    fun testPostWithEmptyBody() = clientTests {
+        config {
+        }
+
+        test { client ->
+            val response = client.post<String>("$TEST_SERVER/echo") {
+                body = EmptyContent
+            }
+
+            assertEquals("", response)
+        }
+    }
+
+    @Test
     fun testDownloadStreamChannelWithCancel() = clientTests {
         test { client ->
             val content = client.get<ByteReadChannel>("$TEST_SERVER/content/stream")
@@ -185,7 +219,6 @@ class ContentTest : ClientLoader() {
         }
     }
 
-
     @Test
     fun testDownloadStreamResponseWithCancel() = clientTests {
         test { client ->
@@ -194,8 +227,20 @@ class ContentTest : ClientLoader() {
         }
     }
 
-    private suspend inline fun <reified Response : Any> HttpClient.echo(body: Any): Response =
-        post("$TEST_SERVER/content/echo") {
-            this.body = body
+    @Test
+    fun testDownloadStreamArrayWithTimeout() = clientTests {
+        test { client ->
+            val result = withTimeoutOrNull(100) {
+                client.get<ByteArray>("$TEST_SERVER/content/stream")
+            }
+
+            assertNull(result)
         }
+    }
+
+    private suspend inline fun <reified Response : Any> HttpClient.echo(
+        body: Any
+    ): Response = post("$TEST_SERVER/content/echo") {
+        this.body = body
+    }
 }

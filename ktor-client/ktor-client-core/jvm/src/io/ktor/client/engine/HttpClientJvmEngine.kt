@@ -34,7 +34,15 @@ abstract class HttpClientJvmEngine(engineName: String) : HttpClientEngine {
     /**
      * Create [CoroutineContext] to execute call.
      */
-    protected fun createCallContext(): CoroutineContext = coroutineContext + Job(clientContext)
+    protected suspend fun createCallContext(): CoroutineContext {
+        val result = coroutineContext + Job(clientContext)
+
+        currentContext()[Job]!!.invokeOnCompletion {  cause ->
+            if (cause != null) result.cancel()
+        }
+
+        return result
+    }
 
     override fun close() {
         clientContext.complete()
@@ -44,3 +52,5 @@ abstract class HttpClientJvmEngine(engineName: String) : HttpClientEngine {
         }
     }
 }
+
+private suspend inline fun currentContext() = coroutineContext

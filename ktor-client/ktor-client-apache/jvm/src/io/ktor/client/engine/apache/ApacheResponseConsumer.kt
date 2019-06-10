@@ -51,8 +51,8 @@ internal class ApacheResponseConsumer(
 
             current.flip()
             if (!backendChannel.offer(current)) {
-                GlobalScope.launch(Dispatchers.Unconfined) {
-                    ioctrl.suspendInput()
+                ioctrl.suspendInput()
+                GlobalScope.launch(callContext + Dispatchers.Unconfined) {
                     try {
                         backendChannel.send(current)
                     } catch (cause: Throwable) {
