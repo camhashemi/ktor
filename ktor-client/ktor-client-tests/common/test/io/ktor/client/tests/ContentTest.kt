@@ -12,6 +12,8 @@ import io.ktor.client.tests.utils.*
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.util.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.io.*
 import kotlinx.io.core.*
 import kotlin.test.*
 
@@ -164,6 +166,31 @@ class ContentTest : ClientLoader() {
                     }
                 )
             }
+        }
+    }
+
+    @Test
+    fun testDownloadStreamChannelWithCancel() = clientTests {
+        test { client ->
+            val content = client.get<ByteReadChannel>("$TEST_SERVER/content/stream")
+            content.cancel()
+        }
+    }
+
+    @Test
+    fun testDownloadStreamResponseWithClose() = clientTests {
+        test { client ->
+            val response = client.get<HttpResponse>("$TEST_SERVER/content/stream")
+            response.close()
+        }
+    }
+
+
+    @Test
+    fun testDownloadStreamResponseWithCancel() = clientTests {
+        test { client ->
+            val response = client.get<HttpResponse>("$TEST_SERVER/content/stream")
+            response.cancel()
         }
     }
 

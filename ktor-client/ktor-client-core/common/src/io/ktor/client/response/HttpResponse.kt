@@ -68,7 +68,7 @@ abstract class HttpResponse : HttpMessage, CoroutineScope, Closeable {
         if (!closed.compareAndSet(false, true)) return
 
         launch {
-            content.discard()
+            content.cancel()
         }
         @Suppress("UNCHECKED_CAST")
         (coroutineContext[Job] as CompletableJob).complete()
