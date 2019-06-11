@@ -213,4 +213,7 @@ afterEvaluate {
 
         reportUndocumented = false
     }
+
+    kotlinNpmResolve.enabled = false
+
 }
