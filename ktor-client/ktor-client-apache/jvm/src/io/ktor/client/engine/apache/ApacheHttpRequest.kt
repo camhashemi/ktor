@@ -10,6 +10,7 @@ import io.ktor.util.date.*
 import kotlinx.coroutines.*
 import org.apache.http.concurrent.*
 import org.apache.http.impl.nio.client.*
+import org.apache.http.protocol.*
 import kotlin.coroutines.*
 
 internal suspend fun CloseableHttpAsyncClient.sendRequest(
@@ -46,9 +47,5 @@ internal suspend fun CloseableHttpAsyncClient.sendRequest(
         }
     }
 
-    try {
-        execute(request, consumer, callback)
-    } catch (cause: Throwable) {
-        continuation.cancel(cause)
-    }
+    execute(request, consumer, callback)
 }

@@ -35,13 +35,17 @@ abstract class HttpClientJvmEngine(engineName: String) : HttpClientEngine {
      * Create [CoroutineContext] to execute call.
      */
     protected suspend fun createCallContext(): CoroutineContext {
-        val result = coroutineContext + Job(clientContext)
+        val callJob = Job(clientContext)
+        val callContext = coroutineContext + callJob
 
-        currentContext()[Job]!!.invokeOnCompletion {  cause ->
-            if (cause != null) result.cancel()
+        val topLevelJob = currentContext()[Job]
+        val handle = topLevelJob?.invokeOnCompletion { cause ->
+            if (cause != null) callContext.cancel()
         }
 
-        return result
+        callJob.invokeOnCompletion { handle?.dispose() }
+
+        return callContext
     }
 
     override fun close() {

@@ -73,11 +73,13 @@ class AndroidClientEngine(override val config: AndroidEngineConfig) : HttpClient
 
             val statusCode = HttpStatusCode(connection.responseCode, connection.responseMessage)
             val content: ByteReadChannel = connection.content(callContext)
-            val headerFields: MutableMap<String, MutableList<String>> = connection.headerFields
+            val headerFields: MutableMap<String?, MutableList<String>> = connection.headerFields
             val version: HttpProtocolVersion = HttpProtocolVersion.HTTP_1_1
 
             val responseHeaders = HeadersBuilder().apply {
-                headerFields.forEach { (key: String, values: MutableList<String>) -> appendAll(key, values) }
+                headerFields.forEach { (key: String?, values: MutableList<String>) ->
+                    if (key != null) appendAll(key, values)
+                }
             }.build()
 
             return@async HttpResponseData(statusCode, requestTime, responseHeaders, version, content, callContext)
